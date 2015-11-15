@@ -24,7 +24,7 @@
 
 #include <cassert>
 #include <vector>
-#ifdef VIENNACL_WITH_AVX2
+#if defined(VIENNACL_WITH_AVX2) || defined(VIENNACL_WITH_AVX)
 #include <stdlib.h>
 #endif
 
@@ -55,7 +55,7 @@ namespace detail
   template<class U>
   struct array_deleter
   {
-#ifdef VIENNACL_WITH_AVX2
+#if defined(VIENNACL_WITH_AVX2) || defined(VIENNACL_WITH_AVX)
     void operator()(U* p) const { free(p); }
 #else
     void operator()(U* p) const { delete[] p; }
@@ -72,12 +72,32 @@ namespace detail
  */
 inline handle_type  memory_create(vcl_size_t size_in_bytes, const void * host_ptr = NULL)
 {
-#ifdef VIENNACL_WITH_AVX2
-  // Note: aligned_alloc not available on all compilers. Consider platform-specific alternatives such as posix_memalign()
+#if  defined(VIENNACL_WITH_AVX2) || defined(VIENNACL_WITH_AVX)
+#  ifdef VIENNACL_WITH_POSIX_MEMALIGN
+    if (!host_ptr)
+    {
+      void *mem_ptr;
+      if(posix_memalign(&mem_ptr, 32, size_in_bytes))
+      {
+        std::bad_alloc exception;
+        throw exception;
+      }
+      return handle_type(reinterpret_cast<char*>(mem_ptr), detail::array_deleter<char>());
+    }
+    void *mem_ptr;
+    if(posix_memalign(&mem_ptr, 32, size_in_bytes))
+    {
+      std::bad_alloc exception;
+      throw exception;
+    }
+    handle_type new_handle(reinterpret_cast<char*>(mem_ptr), detail::array_deleter<char>());
+#  else
+  // "Note: aligned_alloc not available on all compilers. Consider platform-specific alternatives such as posix_memalign()" => added above 
   if (!host_ptr)
     return handle_type(reinterpret_cast<char*>(aligned_alloc(32, size_in_bytes)), detail::array_deleter<char>());
 
   handle_type new_handle(reinterpret_cast<char*>(aligned_alloc(32, size_in_bytes)), detail::array_deleter<char>());
+#endif
 #else
   if (!host_ptr)
     return handle_type(new char[size_in_bytes], detail::array_deleter<char>());
